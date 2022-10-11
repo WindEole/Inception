@@ -1,0 +1,114 @@
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    docker-compose.yml                                 :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: iderighe <marvin@42.fr>                    +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2022/09/07 10:58:00 by iderighe          #+#    #+#              #
+#    Updated: 2022/09/07 10:58:04 by iderighe         ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
+
+#---------------------------------------------------------#
+#                         VERSION                         #
+#---------------------------------------------------------#
+
+# definir la version de docker-compose (DC) qu'on utilise. La 3 est la plus utilisee
+version: '3'
+
+#---------------------------------------------------------#
+#                         SERVICES                        #
+#---------------------------------------------------------#
+
+# l'ensemble des conteneurs qui doivent etre crees doivent etre definis sous 
+# l'argument services. Chaque conteneur commence avec un nom qui lui est propre
+
+services:
+
+# ----------   MARIADB   ---------- #
+
+  mariadb:  # premier service, son image (build depuis dockerfile), son volume de sauvegarde des donnees : mariadb
+    container_name: mariadb
+    build: ./requirements/mariadb/
+    env_file:
+      - .env
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - my_network
+    # ports: # -> Ne pas laisser ici sinon le web a accès au port 3306 au même titre qu'à 443. Utiliser EXPOSE dans Dockerfile !
+    #   - "3306:3306"
+    restart: unless-stopped
+
+# ----------   WORDPRESS   ---------- #
+
+  wordpress: # deuxieme service, sa dependance, son image (build depuis dockerfile) : wordpress
+    container_name: wordpress
+    depends_on:
+      - mariadb
+    build: ./requirements/wordpress/
+    env_file:
+      - .env
+    volumes:
+      - wordpress_data:/var/www/html/wordpress
+    networks:
+      - my_network
+    # ports:
+    #   - "9000:9000"
+    restart: unless-stopped
+
+# ----------   NGINX   ---------- #
+
+# NGINX is a popular open source software for setting up webservers and reverse proxy. 
+# It will also serve to set up the HTTPS Secure connection with SSL / TLS.
+
+  nginx:  # troisieme service, sa dependance, son image (build depuis dockerfile) et son port d'acces : nginx
+    container_name: nginx
+    depends_on:
+      - wordpress
+    build: ./requirements/nginx/
+    volumes:
+      - wordpress_data:/var/www/html/wordpress
+    networks:
+      - my_network
+    ports:
+      - "443:443"
+    restart: unless-stopped
+
+#---------------------------------------------------------#
+#                         NETWORK                         #
+#---------------------------------------------------------#
+
+# Un bridge Network utilise un logiciel qui permet aux containers connectes au meme bridge network
+# de communiquer entre eux, tout en isolant les containers qui ne sont pas connectés avec ce bridge.
+# Bénéfice d'un user-defined bridge network :
+# 1) Automatic DNS resolution between containers (pas besoin de --link)
+# 2) Better isolation : les containers ne sont pas rattachés au default network, et ne peuvent donc communiquer
+#     avec des réseaux autres
+# 3) Containers on same network share environnement variables
+
+networks:
+  my_network:
+    driver: bridge
+
+# --------------------------------------------------------#
+#                         VOLUMES                         #
+# --------------------------------------------------------#
+
+volumes:
+  wordpress_data:
+    driver: local
+    name: wordpress_data
+    driver_opts:
+      device: /home/iderighe/data/wordpress
+      type: none
+      o: bind
+
+  mariadb_data:
+    driver: local
+    name: mariadb_data
+    driver_opts:
+      device: /home/iderighe/data/mariadb
+      type: none
+      o: bind
